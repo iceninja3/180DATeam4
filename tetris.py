@@ -133,19 +133,25 @@ def draw_piece(surface, piece):
                 pygame.draw.rect(surface, piece.color, ((piece.x + x) * BLOCK_SIZE, (piece.y + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
 def main():
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # Make the window resizable
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Tetris")
     clock = pygame.time.Clock()
     game = Tetris(GRID_WIDTH, GRID_HEIGHT)
 
+    # Use a render surface to draw everything at the original resolution
+    render_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+
     fall_time = 0
     fall_speed = 500 # ms
+    normal_fall_speed = 500
+    fast_fall_speed = 50
 
     run = True
     while run:
-        screen.fill(BLACK)
+        render_surface.fill(BLACK)
         fall_time += clock.get_rawtime()
-        clock.tick()
+        clock.tick(60) # Limit frame rate so it doesn't max out CPU
 
         if fall_time >= fall_speed:
             fall_time = 0
@@ -154,28 +160,50 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+            if event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
                     game.move_left()
                 if event.key == pygame.K_RIGHT:
                     game.move_right()
                 if event.key == pygame.K_DOWN:
-                    game.move_down()
+                    fall_speed = fast_fall_speed # Move faster while holding down
                 if event.key == pygame.K_UP:
                     game.rotate_piece()
+                if event.key == pygame.K_f:
+                    pygame.display.toggle_fullscreen() # Try toggling native fullscreen
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_DOWN:
+                    fall_speed = normal_fall_speed # Restore normal speed when released
 
-        draw_grid(screen, game.grid)
-        draw_piece(screen, game.current_piece)
+        draw_grid(render_surface, game.grid)
+        draw_piece(render_surface, game.current_piece)
         
+        # Display the score
+        font = pygame.font.Font(None, 36)
+        score_text = font.render(f'Score: {game.score}', True, WHITE)
+        render_surface.blit(score_text, (SCREEN_WIDTH - score_text.get_width() - 10, 10))
+
         if game.game_over:
-            font = pygame.font.SysFont('comicsans', 60, True)
+            # Replaced SysFont to avoid timeout error
+            font = pygame.font.Font(None, 60)
             label = font.render('GAME OVER', 1, WHITE)
-            screen.blit(label, (SCREEN_WIDTH // 2 - label.get_width() // 2, SCREEN_HEIGHT // 2 - label.get_height() // 2))
-            pygame.display.update()
-            pygame.time.delay(2000)
+            render_surface.blit(label, (SCREEN_WIDTH // 2 - label.get_width() // 2, SCREEN_HEIGHT // 2 - label.get_height() // 2))
             run = False
 
+        # Scale the render_surface to fit the window while maintaining aspect ratio
+        screen_w, screen_h = screen.get_size()
+        ratio = min(screen_w / SCREEN_WIDTH, screen_h / SCREEN_HEIGHT)
+        scaled_w, scaled_h = int(SCREEN_WIDTH * ratio), int(SCREEN_HEIGHT * ratio)
+        scaled_surface = pygame.transform.scale(render_surface, (scaled_w, scaled_h))
+        
+        screen.fill(BLACK) # Clear screen to black for letterboxing
+        screen.blit(scaled_surface, ((screen_w - scaled_w) // 2, (screen_h - scaled_h) // 2))
         pygame.display.update()
+
+        if game.game_over:
+            pygame.time.delay(2000)
 
     pygame.quit()
 
